@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Gemini Usage & Rate Limit Monitor
 // @namespace    https://gemini.google.com/
-// @version      7.0
-// @description  Aktives API-Polling, passives Listening + XHR Dumper + ID-Mapping + Reset-Zeiten.
+// @version      7.1
+// @description  Aktives API-Polling, passives Listening + XHR Dumper + ID-Mapping + Reset-Zeiten (i18n ready).
 // @author       Christian Schmitt
 // @match        https://gemini.google.com/*
 // @grant        none
@@ -12,6 +12,46 @@
 
 (function () {
     'use strict';
+
+    // --- i18n Konfiguration ---
+    const I18N = {
+        en: {
+            tooltipSync: "Click to sync manually",
+            limitInit: "Limit: Initializing...",
+            limitSync: "Limit: {current}% (Sync...)",
+            limitValue: "Limit: {current}%",
+            weeklyLimit: "Weekly limit: {weekly}%",
+            limitWait: "Limit: Waiting for API..."
+        },
+        de: {
+            tooltipSync: "Klicken zum manuellen Synchronisieren",
+            limitInit: "Limit: Initialisiere...",
+            limitSync: "Limit: {current}% (Sync...)",
+            limitValue: "Limit: {current}%",
+            weeklyLimit: "Wochenlimit: {weekly}%",
+            limitWait: "Limit: Warte auf API..."
+        }
+    };
+
+    const DEFAULT_LANG = 'en';
+
+    function getBrowserLanguage() {
+        const hostLang = document.documentElement.lang || '';
+        const navLang = (navigator.languages && navigator.languages[0]) || navigator.language || DEFAULT_LANG;
+        const shortLang = (hostLang || navLang).toLowerCase().split('-')[0];
+        
+        return I18N[shortLang] ? shortLang : DEFAULT_LANG;
+    }
+
+    const currentLang = getBrowserLanguage();
+
+    function t(key, params = {}) {
+        let template = I18N[currentLang]?.[key] || I18N[DEFAULT_LANG]?.[key] || key;
+        return Object.entries(params).reduce((acc, [placeholder, value]) => {
+            return acc.replaceAll(`{${placeholder}}`, value);
+        }, template);
+    }
+    // --------------------------
 
     const style = document.createElement('style');
     style.textContent = `
@@ -65,7 +105,7 @@
         if (!badge) {
             badge = document.createElement('div');
             badge.id = 'gemini-usage-badge';
-            badge.title = 'Klicken zum manuellen Synchronisieren';
+            badge.title = t('tooltipSync');
             badge.addEventListener('click', () => {
                 if (!isSyncing && wizUrl && wizAt) fetchQuota();
                 else console.info('[Gemini Dumper] Manuelles Sync blockiert. Status:', {isSyncing, hasWizUrl: !!wizUrl, hasWizAt: !!wizAt});
@@ -75,20 +115,21 @@
 
         if (isSyncing) {
             badge.classList.add('syncing');
-            badge.textContent = lastCurrentPercent !== null ? `Limit: ${lastCurrentPercent}% (Sync...)` : 'Limit: Initialisiere...';
+            badge.textContent = lastCurrentPercent !== null 
+                ? t('limitSync', { current: lastCurrentPercent }) 
+                : t('limitInit');
         } else {
             badge.classList.remove('syncing');
             if (lastCurrentPercent !== null) {
-                let text = `Limit: ${lastCurrentPercent}%`;
+                let text = t('limitValue', { current: lastCurrentPercent });
                 if (resetTimeCurrent) text += ` (${resetTimeCurrent})`;
-                if (lastWeeklyPercent !== null) text += `\nWochenlimit: ${lastWeeklyPercent}%`;
+                if (lastWeeklyPercent !== null) text += `\n${t('weeklyLimit', { weekly: lastWeeklyPercent })}`;
 
                 badge.textContent = text;
-
                 if (lastCurrentPercent >= 80) badge.classList.add('warning');
                 else badge.classList.remove('warning');
             } else {
-                badge.textContent = 'Limit: Warte auf API...';
+                badge.textContent = t('limitWait');
             }
         }
     }
@@ -109,7 +150,9 @@
 
                             if (q[3] && q[3][0] && q[3][0][0]) {
                                 const date = new Date(q[3][0][0] * 1000);
-                                timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                                // Nutzt die erkannte Zielsprache für die Uhrzeit (inkl. korrekter AM/PM Formatierung)
+                                const localeString = currentLang === 'de' ? 'de-DE' : 'en-US';
+                                timeStr = date.toLocaleTimeString(localeString, { hour: '2-digit', minute: '2-digit' });
                             }
 
                             if (q[2] === 1) {
