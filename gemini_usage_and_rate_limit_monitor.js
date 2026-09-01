@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Gemini Usage & Rate Limit Monitor
 // @namespace    https://gemini.google.com/
-// @version      7.1
-// @description  Aktives API-Polling, passives Listening + XHR Dumper + ID-Mapping + Reset-Zeiten (i18n ready).
+// @version      8.0
+// @description  Active API polling, passive listening + XHR dumper + ID mapping + reset times (i18n ready).
 // @author       Christian Schmitt
 // @match        https://gemini.google.com/*
 // @grant        none
@@ -13,7 +13,7 @@
 (function () {
     'use strict';
 
-    // --- i18n Konfiguration ---
+    // --- i18n Configuration ---
     const I18N = {
         en: {
             tooltipSync: "Click to sync manually",
@@ -30,6 +30,62 @@
             limitValue: "Limit: {current}%",
             weeklyLimit: "Wochenlimit: {weekly}%",
             limitWait: "Limit: Warte auf API..."
+        },
+        es: {
+            tooltipSync: "Haz clic para sincronizar manualmente",
+            limitInit: "Límite: Inicializando...",
+            limitSync: "Límite: {current}% (Sincronizando...)",
+            limitValue: "Límite: {current}%",
+            weeklyLimit: "Límite semanal: {weekly}%",
+            limitWait: "Límite: Esperando a la API..."
+        },
+        it: {
+            tooltipSync: "Fai clic per sincronizzare manualmente",
+            limitInit: "Limite: Inizializzazione...",
+            limitSync: "Limite: {current}% (Sincronizzazione...)",
+            limitValue: "Limite: {current}%",
+            weeklyLimit: "Limite settimanale: {weekly}%",
+            limitWait: "Limite: In attesa dell'API..."
+        },
+        pl: {
+            tooltipSync: "Kliknij, aby zsynchronizować ręcznie",
+            limitInit: "Limit: Inicjowanie...",
+            limitSync: "Limit: {current}% (Synchronizacja...)",
+            limitValue: "Limit: {current}%",
+            weeklyLimit: "Limit tygodniowy: {weekly}%",
+            limitWait: "Limit: Oczekiwanie na API..."
+        },
+        ru: {
+            tooltipSync: "Нажмите для ручной синхронизации",
+            limitInit: "Лимит: Инициализация...",
+            limitSync: "Лимит: {current}% (Синхронизация...)",
+            limitValue: "Лимит: {current}%",
+            weeklyLimit: "Недельный лимит: {weekly}%",
+            limitWait: "Лимит: Ожидание API..."
+        },
+        zh: {
+            tooltipSync: "点击手动同步",
+            limitInit: "额度：初始化中...",
+            limitSync: "额度：{current}% (同步中...)",
+            limitValue: "额度：{current}%",
+            weeklyLimit: "每周额度：{weekly}%",
+            limitWait: "额度：等待 API..."
+        },
+        ko: {
+            tooltipSync: "수동으로 동기화하려면 클릭하세요",
+            limitInit: "제한: 초기화 중...",
+            limitSync: "제한: {current}% (동기화 중...)",
+            limitValue: "제한: {current}%",
+            weeklyLimit: "주간 제한: {weekly}%",
+            limitWait: "제한: API 대기 중..."
+        },
+        ja: {
+            tooltipSync: "クリックして手動で同期",
+            limitInit: "制限: 初期化中...",
+            limitSync: "制限: {current}% (同期中...)",
+            limitValue: "制限: {current}%",
+            weeklyLimit: "週間制限: {weekly}%",
+            limitWait: "制限: API待機中..."
         }
     };
 
@@ -53,6 +109,7 @@
     }
     // --------------------------
 
+    // Using createElement for CSP compliance in Violentmonkey
     const style = document.createElement('style');
     style.textContent = `
         #gemini-usage-badge {
@@ -108,7 +165,7 @@
             badge.title = t('tooltipSync');
             badge.addEventListener('click', () => {
                 if (!isSyncing && wizUrl && wizAt) fetchQuota();
-                else console.info('[Gemini Dumper] Manuelles Sync blockiert. Status:', {isSyncing, hasWizUrl: !!wizUrl, hasWizAt: !!wizAt});
+                else console.info('[Gemini Dumper] Manual sync blocked. Status:', {isSyncing, hasWizUrl: !!wizUrl, hasWizAt: !!wizAt});
             });
             document.body.appendChild(badge);
         }
@@ -150,9 +207,8 @@
 
                             if (q[3] && q[3][0] && q[3][0][0]) {
                                 const date = new Date(q[3][0][0] * 1000);
-                                // Nutzt die erkannte Zielsprache für die Uhrzeit (inkl. korrekter AM/PM Formatierung)
-                                const localeString = currentLang === 'de' ? 'de-DE' : 'en-US';
-                                timeStr = date.toLocaleTimeString(localeString, { hour: '2-digit', minute: '2-digit' });
+                                // Using standard Intl API formatting dynamically based on detected browser language
+                                timeStr = date.toLocaleTimeString(currentLang, { hour: '2-digit', minute: '2-digit' });
                             }
 
                             if (q[2] === 1) {
@@ -164,6 +220,7 @@
                         }
                     });
 
+                    // Fallback heuristics if indexes 1 and 2 are missing
                     if (lastCurrentPercent === null && quotas.length >= 2) {
                         lastWeeklyPercent = Math.round(quotas[0][1] * 100);
                         lastCurrentPercent = Math.round(quotas[1][1] * 100);
@@ -171,12 +228,12 @@
                         lastCurrentPercent = Math.round(quotas[0][1] * 100);
                     }
 
-                    console.info(`[Gemini Dumper] Quota verarbeitet via ${source}. Aktuell: ${lastCurrentPercent}%, Woche: ${lastWeeklyPercent}%, Reset: ${resetTimeCurrent}`);
+                    console.info(`[Gemini Dumper] Quota processed via ${source}. Current: ${lastCurrentPercent}%, Weekly: ${lastWeeklyPercent}%, Reset: ${resetTimeCurrent}`);
                     updateBadgeUI();
                 }
             }
         } catch (e) {
-            console.error('[Gemini Dumper] Fehler beim Parsen der Quota-Response:', e);
+            console.error('[Gemini Dumper] Error parsing quota response:', e);
         }
     }
 
@@ -197,13 +254,14 @@
         })
         .then(res => res.text())
         .then(text => processQuotaResponse(text, 'Active Fetch'))
-        .catch(err => console.error('[Gemini Dumper] API Fetch Fehler:', err))
+        .catch(err => console.error('[Gemini Dumper] API Fetch error:', err))
         .finally(() => {
             isSyncing = false;
             updateBadgeUI();
         });
     }
 
+    // Intercept native XHR methods to extract IDs and payloads
     const originalOpen = window.XMLHttpRequest.prototype.open;
     const originalSend = window.XMLHttpRequest.prototype.send;
 
@@ -227,6 +285,8 @@
                 if (match) {
                     wizAt = match[1];
                     wizUrl = this._url;
+                    
+                    // Trigger active fetch when initial credentials are found
                     setTimeout(fetchQuota, 1000);
                     if (!syncInterval) syncInterval = setInterval(fetchQuota, 3 * 60 * 1000);
                 }
@@ -235,5 +295,6 @@
         originalSend.apply(this, arguments);
     };
 
+    // Initialize UI on load
     updateBadgeUI();
 })();
